@@ -50,26 +50,29 @@ fn count_same(same_count: &mut usize, cell: Option<Player>, player: Option<Playe
 }
 
 fn check_columns(board: &GameBoard, player: Option<Player>, required_row_length: usize) -> bool {
-  (0..board.len()).fold(false, |prev_state, y| {
-    prev_state ||
-    (0..board.len()).map(|x| {
-      board[y][x]
-    })
-    .scan(0, |a, b|  count_same(a, b, player))
-    .skip_while(|count| *count < required_row_length)
-    .next()
-    .is_some()
+  iterate_board(board, player, required_row_length, |x, y, board|board[y][x])
+}
+
+fn check_rows(board: &GameBoard, player: Option<Player>, required_row_length: usize) -> bool {
+  iterate_board(board, player, required_row_length, |x, y, board|board[x][y])
+}
+
+fn check_diagonal(board: &GameBoard, player: Option<Player>, required_row_length: usize) -> bool {
+  iterate_board(board, player, required_row_length, |x, y, board|board[x][(x + y) % board.len()]) ||
+  iterate_board(board, player, required_row_length, |x, y, board| {
+    let val = y as i16 - x as i16;
+    let length = board.len() as i16;
+    let val = ((val % length) + length) % length;
+    board[val as usize][x]
   })
 }
 
-//TODO: could share more logic with check_columns
-fn check_rows(board: &GameBoard, player: Option<Player>, required_row_length: usize) -> bool {
+fn iterate_board(board: &GameBoard, player: Option<Player>, required_row_length: usize, cell_getter: fn(usize, usize, &GameBoard) -> Option<Player>) -> bool {
   (0..board.len()).fold(false, |prev_state, y| {
     prev_state ||
-    (0..board.len()).map(|x| {
-      board[x][y]
-    })
-    .scan(0, |a, b| count_same(a, b, player))
+    (0..board.len())
+    .map(|count| cell_getter(count, y, board))
+    .scan(0, |current_count, cell| count_same(current_count, cell, player))
     .skip_while(|count| *count < required_row_length)
     .next()
     .is_some()
@@ -81,7 +84,8 @@ fn check_win_condition(board: &GameBoard, player: Player) -> bool {
   let player = Some(player);
 
   check_columns(&board, player, required_row_length) ||
-    check_rows(&board, player, required_row_length)
+    check_rows(&board, player, required_row_length) ||
+    check_diagonal(&board, player, required_row_length)
 }
 
 fn get_winner(board: &GameBoard, player: Player) -> Option<Winner> {
@@ -101,6 +105,9 @@ pub fn make_turn(game_state: GameState, y_pos: usize, x_pos: usize) -> Result<Ga
   if game_state.winner.is_some() {
     return Err(LuffarError::GameOver);
   }
+
+  //TODO: check input
+  //TODO: make board bigger if needed
   
   let board = update_board(&game_state, y_pos, x_pos);
   let winner = get_winner(&board, game_state.next_player);
@@ -181,6 +188,28 @@ mod tests {
     let game_state = make_turn(game_state.unwrap(), 1, 0);
     let game_state = make_turn(game_state.unwrap(), 1, 1);
     let game_state = make_turn(game_state.unwrap(), 2, 0);
+    assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
+  }
+
+  #[test]
+  fn diagonal_win() {
+    let game_state = start();
+    let game_state = make_turn(game_state, 1, 0);
+    let game_state = make_turn(game_state.unwrap(), 1, 1);
+    let game_state = make_turn(game_state.unwrap(), 2, 1);
+    let game_state = make_turn(game_state.unwrap(), 0, 2);
+    let game_state = make_turn(game_state.unwrap(), 3, 2);
+    assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
+  }
+
+  #[test]
+  fn diagonal_win2() {
+    let game_state = start();
+    let game_state = make_turn(game_state, 4, 1);
+    let game_state = make_turn(game_state.unwrap(), 1, 0);
+    let game_state = make_turn(game_state.unwrap(), 3, 2);
+    let game_state = make_turn(game_state.unwrap(), 1, 3);
+    let game_state = make_turn(game_state.unwrap(), 2, 3);
     assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
   }
 }
