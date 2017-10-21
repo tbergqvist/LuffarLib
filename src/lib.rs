@@ -16,7 +16,8 @@ pub enum Winner {
 pub struct GameState {
   board: GameBoard,
   next_player: Player,
-  winner: Option<Winner>
+  winner: Option<Winner>,
+  required_row_length: usize
 }
 
 #[derive(Debug)]
@@ -68,8 +69,8 @@ fn check_diagonal(board: &GameBoard, player: Option<Player>, required_row_length
 }
 
 fn iterate_board(board: &GameBoard, player: Option<Player>, required_row_length: usize, cell_getter: fn(usize, usize, &GameBoard) -> Option<Player>) -> bool {
-  (0..board.len()).fold(false, |prev_state, y| {
-    prev_state ||
+  (0..board.len()).fold(false, |won, y| {
+    won ||
     (0..board.len())
     .map(|count| cell_getter(count, y, board))
     .scan(0, |current_count, cell| count_same(current_count, cell, player))
@@ -79,8 +80,7 @@ fn iterate_board(board: &GameBoard, player: Option<Player>, required_row_length:
   })
 }
 
-fn check_win_condition(board: &GameBoard, player: Player) -> bool {
-  let required_row_length = 3; //TODO: add to GameState
+fn check_win_condition(board: &GameBoard, player: Player, required_row_length: usize) -> bool {
   let player = Some(player);
 
   check_columns(&board, player, required_row_length) ||
@@ -88,10 +88,10 @@ fn check_win_condition(board: &GameBoard, player: Player) -> bool {
     check_diagonal(&board, player, required_row_length)
 }
 
-fn get_winner(board: &GameBoard, player: Player) -> Option<Winner> {
+fn get_winner(board: &GameBoard, player: Player, required_row_length: usize) -> Option<Winner> {
   if has_no_cells_left(&board) {
     Some(Winner::Draw)
-  } else if check_win_condition(&board, player) {
+  } else if check_win_condition(&board, player, required_row_length) {
     match player {
       Player::Circle => Some(Winner::Circle),
       Player::Cross => Some(Winner::Cross)
@@ -101,26 +101,34 @@ fn get_winner(board: &GameBoard, player: Player) -> Option<Winner> {
   }
 }
 
-pub fn make_turn(game_state: GameState, y_pos: usize, x_pos: usize) -> Result<GameState, LuffarError> {
+pub fn do_turn(game_state: GameState, y_pos: usize, x_pos: usize) -> Result<GameState, LuffarError> {
   if game_state.winner.is_some() {
     return Err(LuffarError::GameOver);
   }
 
-  //TODO: check input
+  if y_pos >= game_state.board.len() || x_pos >= game_state.board.len() {
+    return Err(LuffarError::InvalidPosition);
+  }
+
+  if game_state.board[y_pos][x_pos].is_some() {
+    return Err(LuffarError::InvalidPosition);
+  }
   //TODO: make board bigger if needed
   
   let board = update_board(&game_state, y_pos, x_pos);
-  let winner = get_winner(&board, game_state.next_player);
+  let winner = get_winner(&board, game_state.next_player, game_state.required_row_length);
 
   Ok(GameState {
     board: board,
     next_player: opposite_player(&game_state.next_player),
-    winner: winner
+    winner: winner,
+    required_row_length: game_state.required_row_length
   })
 }
 
 fn update_board(game_state: &GameState, y_pos: usize, x_pos: usize) -> GameBoard {
   let mut board = game_state.board.clone();
+
   board[y_pos][x_pos] = Some(game_state.next_player);
   board
 }
@@ -129,11 +137,12 @@ fn create_initial_board(size: usize) -> GameBoard {
   vec![vec![None; size]; size]
 }
 
-pub fn start() -> GameState {
+pub fn start(board_size: usize, required_row_length: usize) -> GameState {
   GameState {
-    board: create_initial_board(5),
+    board: create_initial_board(board_size),
     next_player: Player::Cross,
-    winner: None
+    winner: None,
+    required_row_length: required_row_length
   }
 }
 
@@ -142,74 +151,74 @@ mod tests {
   use start;
   use Player;
   use Winner;
-  use make_turn;
+  use do_turn;
   
   #[test]
   fn inital_board_is_five() {
-    let game_state = start();
+    let game_state = start(5, 3);
     assert_eq!(game_state.board.len(), 5);
   }
   
   #[test]
   fn cross_starts() {
-    let game_state = start();
+    let game_state = start(5, 3);
     assert_eq!(game_state.next_player, Player::Cross);
   }
 
   #[test]
-  fn make_turn_changes_player() {
-    let game_state = start();
-    let game_state = make_turn(game_state, 0, 0);
+  fn do_turn_changes_player() {
+    let game_state = start(5, 3);
+    let game_state = do_turn(game_state, 0, 0);
     assert_eq!(game_state.unwrap().next_player, Player::Circle);
   }
 
   #[test]
   fn no_winner() {
-    let game_state = start();
+    let game_state = start(5, 3);
     assert_eq!(game_state.winner, None);
   }
 
   #[test]
   fn column_win() {
-    let game_state = start();
-    let game_state = make_turn(game_state, 0, 0);
-    let game_state = make_turn(game_state.unwrap(), 1, 0);
-    let game_state = make_turn(game_state.unwrap(), 0, 1);
-    let game_state = make_turn(game_state.unwrap(), 1, 1);
-    let game_state = make_turn(game_state.unwrap(), 0, 2);
+    let game_state = start(5, 3);
+    let game_state = do_turn(game_state, 0, 0);
+    let game_state = do_turn(game_state.unwrap(), 1, 0);
+    let game_state = do_turn(game_state.unwrap(), 0, 1);
+    let game_state = do_turn(game_state.unwrap(), 1, 1);
+    let game_state = do_turn(game_state.unwrap(), 0, 2);
     assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
   }
 
   #[test]
   fn row_win() {
-    let game_state = start();
-    let game_state = make_turn(game_state, 0, 0);
-    let game_state = make_turn(game_state.unwrap(), 0, 1);
-    let game_state = make_turn(game_state.unwrap(), 1, 0);
-    let game_state = make_turn(game_state.unwrap(), 1, 1);
-    let game_state = make_turn(game_state.unwrap(), 2, 0);
+    let game_state = start(5, 3);
+    let game_state = do_turn(game_state, 0, 0);
+    let game_state = do_turn(game_state.unwrap(), 0, 1);
+    let game_state = do_turn(game_state.unwrap(), 1, 0);
+    let game_state = do_turn(game_state.unwrap(), 1, 1);
+    let game_state = do_turn(game_state.unwrap(), 2, 0);
     assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
   }
 
   #[test]
   fn diagonal_win() {
-    let game_state = start();
-    let game_state = make_turn(game_state, 1, 0);
-    let game_state = make_turn(game_state.unwrap(), 1, 1);
-    let game_state = make_turn(game_state.unwrap(), 2, 1);
-    let game_state = make_turn(game_state.unwrap(), 0, 2);
-    let game_state = make_turn(game_state.unwrap(), 3, 2);
+    let game_state = start(5, 3);
+    let game_state = do_turn(game_state, 1, 0);
+    let game_state = do_turn(game_state.unwrap(), 1, 1);
+    let game_state = do_turn(game_state.unwrap(), 2, 1);
+    let game_state = do_turn(game_state.unwrap(), 0, 2);
+    let game_state = do_turn(game_state.unwrap(), 3, 2);
     assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
   }
 
   #[test]
   fn diagonal_win2() {
-    let game_state = start();
-    let game_state = make_turn(game_state, 4, 1);
-    let game_state = make_turn(game_state.unwrap(), 1, 0);
-    let game_state = make_turn(game_state.unwrap(), 3, 2);
-    let game_state = make_turn(game_state.unwrap(), 1, 3);
-    let game_state = make_turn(game_state.unwrap(), 2, 3);
+    let game_state = start(5, 3);
+    let game_state = do_turn(game_state, 4, 1);
+    let game_state = do_turn(game_state.unwrap(), 1, 0);
+    let game_state = do_turn(game_state.unwrap(), 3, 2);
+    let game_state = do_turn(game_state.unwrap(), 1, 3);
+    let game_state = do_turn(game_state.unwrap(), 2, 3);
     assert_eq!(game_state.unwrap().winner.unwrap(), Winner::Cross);
   }
 }
