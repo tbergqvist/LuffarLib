@@ -55,7 +55,7 @@ fn check_diagonal(board: &GameBoard, player: Option<Player>, required_row_length
   ||
   (2..board[0].len()).fold(false, |won, x| {
     won ||
-    (0..x + 1)
+    (0..x + 1).filter(|y| *y < board.len())
     .map(|y| board[y][(x - y)])
     .scan(0, |current_count, cell| count_same(current_count, cell, player))
     .skip_while(|count| *count < required_row_length)
@@ -65,7 +65,7 @@ fn check_diagonal(board: &GameBoard, player: Option<Player>, required_row_length
   ||
   (2..board[0].len()).fold(false, |won, x| {
     won ||
-    (0..x + 1)
+    (0..x + 1).filter(|y| *y < board.len())
     .map(|y| board[board.len() - y - 1][board[0].len() - (x - y)- 1])
     .scan(0, |current_count, cell| count_same(current_count, cell, player))
     .skip_while(|count| *count < required_row_length)
@@ -127,4 +127,5 @@ mod tests {
     ];
     assert!(check_win_condition(&board, Player::Circle, 3));
   }
+
 }

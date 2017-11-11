@@ -1,7 +1,7 @@
 mod win_check;
 mod game_state;
 
-use game_state::{GameState, Player, GameBoard, Winner, LuffarError};
+pub use game_state::{GameState, Player, GameBoard, Winner, LuffarError};
 
 fn opposite_player(player: &Player) -> Player {
   match *player {
@@ -42,7 +42,7 @@ pub fn do_turn(game_state: GameState, y_pos: usize, x_pos: usize) -> GameState {
     return error(game_state, LuffarError::GameOver);
   }
 
-  if y_pos >= game_state.board.len() || x_pos >= game_state.board.len() {
+  if y_pos >= game_state.board.len() || x_pos >= game_state.board[0].len() {
     return error(game_state, LuffarError::InvalidPosition);
   }
 
@@ -52,7 +52,6 @@ pub fn do_turn(game_state: GameState, y_pos: usize, x_pos: usize) -> GameState {
   
   let board = update_board(&game_state, y_pos, x_pos);
   let winner = get_winner(&board, game_state.next_player, game_state.required_row_length);
-
   GameState {
     board: board,
     next_player: opposite_player(&game_state.next_player),
@@ -62,12 +61,33 @@ pub fn do_turn(game_state: GameState, y_pos: usize, x_pos: usize) -> GameState {
   }
 }
 
+fn expand_board_if_needed(mut board: GameBoard, y_pos:usize, x_pos: usize) -> GameBoard {
+  if y_pos == 0 {
+    let ln = board[0].len();
+    board.insert(0, vec![None; ln]);
+  } else if y_pos == board.len() - 1 {
+    let ln = board[0].len();
+    board.push(vec![None; ln]);
+  }
+
+  if x_pos == 0 {
+    for row in &mut board {
+      row.insert(0, None);
+    }
+  } else if x_pos == board[0].len() - 1 {
+    for row in &mut board {
+      row.push(None);
+    }
+  }
+  board
+}
+
 fn update_board(game_state: &GameState, y_pos: usize, x_pos: usize) -> GameBoard {
   let mut board = game_state.board.clone();
   
   board[y_pos][x_pos] = Some(game_state.next_player);
 
-  board
+  expand_board_if_needed(board, y_pos, x_pos)
 }
 
 fn create_initial_board(size: usize) -> GameBoard {
@@ -89,6 +109,7 @@ mod tests {
   use start;
   use Player;
   use do_turn;
+  use expand_board_if_needed;
   
   #[test]
   fn inital_board_is_five() {
@@ -113,5 +134,57 @@ mod tests {
   fn no_winner() {
     let game_state = start(5, 3);
     assert_eq!(game_state.winner, None);
+  }
+
+  #[test]
+  fn board_is_extended_top() {
+    let board = vec![
+      vec![None, Some(Player::Circle), None],
+      vec![None, None, None],
+      vec![None, None, None],
+    ];
+    let board = expand_board_if_needed(board, 0, 1);
+    assert_eq!(board[0][1], None);
+    assert_eq!(board.len(), 4);
+    assert_eq!(board[0].len(), 3);
+  }
+
+  #[test]
+  fn board_is_extended_bottom() {
+    let board = vec![
+      vec![None, None, None],
+      vec![None, None, None],
+      vec![None, Some(Player::Circle), None],
+    ];
+    let board = expand_board_if_needed(board, 2, 1);
+    assert_eq!(board[2][1], Some(Player::Circle));
+    assert_eq!(board.len(), 4);
+    assert_eq!(board[0].len(), 3);
+  }
+
+  #[test]
+  fn board_is_extended_left() {
+    let board = vec![
+      vec![None, None, None],
+      vec![Some(Player::Circle), None, None],
+      vec![None, None, None],
+    ];
+    let board = expand_board_if_needed(board, 1, 0);
+    assert_eq!(board[1][0], None);
+    assert_eq!(board[0].len(), 4);
+    assert_eq!(board.len(), 3);
+  }
+
+  #[test]
+  fn board_is_extended_right() {
+    let board = vec![
+      vec![None, None, None],
+      vec![None, None, Some(Player::Circle)],
+      vec![None, None, None],
+    ];
+    let board = expand_board_if_needed(board, 1, 2);
+    assert_eq!(board[1][2], Some(Player::Circle));
+    assert_eq!(board[0].len(), 4);
+    assert_eq!(board.len(), 3);
   }
 }
